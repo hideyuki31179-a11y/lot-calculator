@@ -189,6 +189,10 @@ const K_TABLE = {
   fundedelite: { JP225: 1, BTCUSD: 161.71, XAUUSD: 16161.2, US500: 162.7 }
 };
 let acc = "fintokei";
+const DEFAULT_RISK = {
+  fintokei: 50000,
+  fundedelite: 25000
+};
 // 価格の小数桁・利確の丸め単位
 const FMT = {
   JP225:  { dec: 2, lotDec: 2, hint: "ポイント単位" },
@@ -213,6 +217,9 @@ document.querySelectorAll(".acc").forEach(el=>{
     document.querySelectorAll(".acc").forEach(s=>s.classList.remove("active"));
     el.classList.add("active");
     acc = el.dataset.acc;
+    const newRisk = DEFAULT_RISK[acc];
+    riskEl.value = newRisk.toLocaleString("ja-JP");
+    document.querySelector(".risk-badge").textContent = "RISK ¥" + newRisk.toLocaleString("ja-JP");
     calc();
   });
 });
