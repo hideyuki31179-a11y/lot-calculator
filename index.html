@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ロット計算ツール</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0e17">
+<style>
+  :root{
+    --bg:#0a0e17;
+    --panel:#121826;
+    --panel-2:#1a2234;
+    --line:#243044;
+    --ink:#e8edf6;
+    --muted:#7d8aa3;
+    --buy:#2dd4bf;
+    --sell:#f25b8b;
+    --gold:#e6b450;
+    --accent:#5b8def;
+    --win:#2dd4bf;
+    --loss:#f25b8b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    line-height:1.5;
+    padding:18px 16px 60px;
+    max-width:560px;
+    margin:0 auto;
+    min-height:100vh;
+  }
+  .head{margin-bottom:18px}
+  .head h1{
+    font-size:20px;font-weight:700;letter-spacing:.02em;
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .head .risk-badge{
+    font-size:12px;font-weight:600;color:var(--bg);
+    background:var(--gold);padding:2px 9px;border-radius:20px;letter-spacing:.03em;
+  }
+  .head p{color:var(--muted);font-size:13px;margin-top:5px}
+
+  /* シンボルタブ */
+  .symbols{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:18px 0}
+  .sym{
+    background:var(--panel);border:1.5px solid var(--line);border-radius:12px;
+    padding:13px 8px;text-align:center;cursor:pointer;transition:.15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .sym .code{font-size:15px;font-weight:700;letter-spacing:.02em}
+  .sym .name{font-size:11px;color:var(--muted);margin-top:2px}
+  .sym.active{border-color:var(--accent);background:var(--panel-2)}
+  .sym.active .code{color:var(--accent)}
+
+  /* 方向トグル */
+  .dir-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+  .dir{
+    background:var(--panel);border:1.5px solid var(--line);border-radius:12px;
+    padding:12px;text-align:center;cursor:pointer;font-weight:700;font-size:15px;
+    color:var(--muted);transition:.15s;-webkit-tap-highlight-color:transparent;
+  }
+  .dir.buy.active{border-color:var(--buy);color:var(--buy);background:rgba(45,212,191,.08)}
+  .dir.sell.active{border-color:var(--sell);color:var(--sell);background:rgba(242,91,139,.08)}
+  .acc{
+    background:var(--panel);border:1.5px solid var(--line);border-radius:12px;
+    padding:11px;text-align:center;cursor:pointer;font-weight:700;font-size:14px;
+    color:var(--muted);transition:.15s;-webkit-tap-highlight-color:transparent;letter-spacing:.03em;
+  }
+  .acc.active{border-color:var(--gold);color:var(--gold);background:rgba(230,180,80,.08)}
+
+  /* 入力 */
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-weight:500}
+  .field .hint{font-size:11px;color:var(--muted);opacity:.7;margin-left:6px}
+  .field input{
+    width:100%;background:var(--panel);border:1.5px solid var(--line);border-radius:12px;
+    padding:14px 16px;font-size:19px;font-weight:600;color:var(--ink);
+    font-variant-numeric:tabular-nums;letter-spacing:.02em;
+    transition:.15s;-webkit-appearance:none;
+  }
+  .field input:focus{outline:none;border-color:var(--accent);background:var(--panel-2)}
+  .field input::placeholder{color:var(--muted);opacity:.4;font-weight:400}
+  .field.risk input{font-size:17px}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  /* 結果 */
+  .results{margin-top:22px;display:flex;flex-direction:column;gap:1px;
+    background:var(--line);border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+  .res{background:var(--panel);padding:15px 16px;display:flex;justify-content:space-between;align-items:center}
+  .res .k{font-size:13px;color:var(--muted)}
+  .res .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .res.lot{background:var(--panel-2)}
+  .res.lot .k{color:var(--ink);font-weight:600}
+  .res.lot .v{font-size:26px;color:var(--accent)}
+  .res.tp .v{color:var(--win)}
+  .res.sl-amt .v{color:var(--loss)}
+  .res .sub{font-size:11px;color:var(--muted);font-weight:400;margin-left:7px}
+
+  .warn{
+    margin-top:14px;background:rgba(242,91,139,.08);border:1px solid rgba(242,91,139,.3);
+    border-radius:12px;padding:12px 14px;font-size:13px;color:#ffaec7;display:none;
+  }
+  .warn.show{display:block}
+
+  .empty{
+    margin-top:22px;background:var(--panel);border:1px dashed var(--line);border-radius:14px;
+    padding:28px 16px;text-align:center;color:var(--muted);font-size:14px;
+  }
+
+  /* 補足 */
+  .note{margin-top:22px;font-size:12px;color:var(--muted);line-height:1.7}
+  .note b{color:var(--ink);font-weight:600}
+  .note .row{padding:7px 0;border-top:1px solid var(--line)}
+  .note .row:first-of-type{border-top:none}
+
+  .reset{
+    margin-top:18px;width:100%;background:transparent;border:1px solid var(--line);
+    color:var(--muted);padding:11px;border-radius:11px;font-size:13px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .reset:active{background:var(--panel)}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>ロット計算ツール <span class="risk-badge">RISK ¥50,000</span></h1>
+    <p>エントリーと損切りを入れると、損切り到達でちょうど目標リスクになるロット数と、RR1:2の利確値を出します。</p>
+  </div>
+
+  <div class="dir-row" id="accRow" style="margin-bottom:10px">
+    <div class="acc active" data-acc="fintokei">Fintokei</div>
+    <div class="acc" data-acc="fundedelite">FundedElite</div>
+  </div>
+
+  <div class="symbols" id="symbols">
+    <div class="sym active" data-sym="JP225"><div class="code">JP225</div><div class="name">日経平均</div></div>
+    <div class="sym" data-sym="BTCUSD"><div class="code">BTCUSD</div><div class="name">ビットコイン</div></div>
+    <div class="sym" data-sym="XAUUSD"><div class="code">XAUUSD</div><div class="name">金</div></div>
+    <div class="sym" data-sym="US500"><div class="code">US500</div><div class="name">S&amp;P500</div></div>
+  </div>
+
+  <div class="dir-row" id="dirRow">
+    <div class="dir buy active" data-dir="buy">買い Buy</div>
+    <div class="dir sell" data-dir="sell">売り Sell</div>
+  </div>
+
+  <div class="field">
+    <label>エントリー価格</label>
+    <input id="entry" type="text" inputmode="decimal" placeholder="例: 71000">
+  </div>
+
+  <div class="field">
+    <label>損切り価格 <span class="hint" id="slHint"></span></label>
+    <input id="sl" type="text" inputmode="decimal" placeholder="損切りライン">
+  </div>
+
+  <div class="field risk">
+    <label>目標リスク（円）</label>
+    <input id="risk" type="text" inputmode="numeric" value="50,000">
+  </div>
+
+  <div id="output"></div>
+
+  <div class="warn" id="warn"></div>
+
+  <button class="reset" id="reset">価格をクリア</button>
+
+  <div class="note">
+    <div class="row"><b>係数（実トレード履歴から逆算）</b></div>
+    <div class="row">JP225 ＝ 1ロット×1ポイントで <b>1円</b></div>
+    <div class="row">BTCUSD ＝ 1ロット×1ドルで <b>約161.7円</b></div>
+    <div class="row">XAUUSD ＝ 1ロット×1ドルで <b>約16,161円</b></div>
+    <div class="row">US500 ＝ 1ロット×1ポイントで <b>約162円</b>（Fintokei 161.8 / FundedElite 162.7）</div>
+    <div class="row" style="color:var(--gold)">損切りは必ず注文に入れること。RR1:2なので勝率33%超で期待値プラス。</div>
+  </div>
+
+<script>
+// 口座別係数：1ロット×1価格単位あたりの円（実トレードから逆算）
+const K_TABLE = {
+  fintokei:    { JP225: 1, BTCUSD: 161.71, XAUUSD: 16161.2, US500: 161.8 },
+  fundedelite: { JP225: 1, BTCUSD: 161.71, XAUUSD: 16161.2, US500: 162.7 }
+};
+let acc = "fintokei";
+// 価格の小数桁・利確の丸め単位
+const FMT = {
+  JP225:  { dec: 2, lotDec: 2, hint: "ポイント単位" },
+  BTCUSD: { dec: 2, lotDec: 2, hint: "ドル単位" },
+  XAUUSD: { dec: 2, lotDec: 2, hint: "ドル単位" },
+  US500:  { dec: 2, lotDec: 2, hint: "ポイント単位" }
+};
+
+let sym = "JP225";
+let dir = "buy";
+
+const $ = id => document.getElementById(id);
+const entryEl=$("entry"), slEl=$("sl"), riskEl=$("risk"), out=$("output"), warn=$("warn");
+
+function parseNum(s){ if(!s) return NaN; return parseFloat(String(s).replace(/[^0-9.\-]/g,"")); }
+function fmtYen(n){ return "¥"+Math.round(n).toLocaleString("ja-JP"); }
+function fmtPrice(n){ return n.toLocaleString("ja-JP",{minimumFractionDigits:0,maximumFractionDigits:FMT[sym].dec}); }
+
+// 口座選択
+document.querySelectorAll(".acc").forEach(el=>{
+  el.addEventListener("click",()=>{
+    document.querySelectorAll(".acc").forEach(s=>s.classList.remove("active"));
+    el.classList.add("active");
+    acc = el.dataset.acc;
+    calc();
+  });
+});
+// シンボル選択
+document.querySelectorAll(".sym").forEach(el=>{
+  el.addEventListener("click",()=>{
+    document.querySelectorAll(".sym").forEach(s=>s.classList.remove("active"));
+    el.classList.add("active");
+    sym = el.dataset.sym;
+    $("slHint").textContent = FMT[sym].hint;
+    calc();
+  });
+});
+// 方向選択
+document.querySelectorAll(".dir").forEach(el=>{
+  el.addEventListener("click",()=>{
+    document.querySelectorAll(".dir").forEach(s=>s.classList.remove("active"));
+    el.classList.add("active");
+    dir = el.dataset.dir;
+    calc();
+  });
+});
+
+// リスク入力の整形
+riskEl.addEventListener("input",()=>{
+  const n=parseNum(riskEl.value);
+  if(!isNaN(n)){ const pos=riskEl.selectionStart; riskEl.value=n.toLocaleString("ja-JP"); }
+  calc();
+});
+[entryEl,slEl].forEach(el=>el.addEventListener("input",calc));
+
+$("reset").addEventListener("click",()=>{
+  entryEl.value=""; slEl.value=""; calc(); entryEl.focus();
+});
+
+function calc(){
+  const entry=parseNum(entryEl.value);
+  const sl=parseNum(slEl.value);
+  const risk=parseNum(riskEl.value);
+  warn.classList.remove("show");
+
+  if(isNaN(entry)||isNaN(sl)||isNaN(risk)||risk<=0){
+    out.innerHTML='<div class="empty">エントリー価格と損切り価格を入力してください</div>';
+    return;
+  }
+
+  // 方向の整合チェック
+  if(dir==="buy" && sl>=entry){
+    warn.textContent="買いの損切りはエントリーより下に置きます。価格を確認してください。";
+    warn.classList.add("show");
+  }
+  if(dir==="sell" && sl<=entry){
+    warn.textContent="売りの損切りはエントリーより上に置きます。価格を確認してください。";
+    warn.classList.add("show");
+  }
+
+  const slDist = Math.abs(entry - sl);       // 損切りまでの値幅
+  if(slDist===0){
+    out.innerHTML='<div class="empty">エントリーと損切りが同じ価格です</div>';
+    return;
+  }
+
+  // ロット = 目標リスク / (値幅 * 係数)
+  const k = K_TABLE[acc][sym];
+  const lotRaw = risk / (slDist * k);
+  const lotDec = FMT[sym].lotDec;
+  const lot = Math.floor(lotRaw * Math.pow(10,lotDec)) / Math.pow(10,lotDec); // 切り捨て=リスク超えない
+
+  // 実際のリスク（丸め後ロットで再計算）
+  const actualRisk = lot * slDist * k;
+
+  // 利確（RR1:2）：エントリーから損切り幅の2倍、利益方向へ
+  const tpDist = slDist * 2;
+  const tp = dir==="buy" ? entry + tpDist : entry - tpDist;
+  const tpProfit = lot * tpDist * k;
+
+  let html = '<div class="results">';
+  html += `<div class="res lot"><span class="k">推奨ロット数</span><span class="v">${lot.toFixed(lotDec)}<span class="sub">ロット</span></span></div>`;
+  html += `<div class="res"><span class="k">損切り幅</span><span class="v">${fmtPrice(slDist)}<span class="sub">${FMT[sym].hint}</span></span></div>`;
+  html += `<div class="res sl-amt"><span class="k">実際のリスク（損切り時）</span><span class="v">−${fmtYen(actualRisk)}</span></div>`;
+  html += `<div class="res tp"><span class="k">利確価格 <span class="sub" style="color:var(--gold)">RR 1:2</span></span><span class="v">${fmtPrice(tp)}</span></div>`;
+  html += `<div class="res tp"><span class="k">利確時の利益</span><span class="v">+${fmtYen(tpProfit)}</span></div>`;
+  html += '</div>';
+
+  if(lot===0){
+    html='<div class="empty" style="color:var(--loss)">損切り幅が広すぎて、目標リスク内に収まる最小ロットがありません。損切りを近づけるかリスクを上げてください。</div>';
+  }
+
+  out.innerHTML=html;
+}
+
+$("slHint").textContent = FMT[sym].hint;
+calc();
+
+// PWA: オフライン対応
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+
+</script>
+</body>
+</html>
