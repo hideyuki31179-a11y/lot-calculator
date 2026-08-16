@@ -35,7 +35,7 @@
   .dot.manual{background:var(--warn)}
 
   /* symbol tabs */
-  .symbols{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:22px}
+  .symbols{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:22px}
   .sym{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 6px;text-align:center;cursor:pointer;transition:.14s;position:relative;overflow:hidden}
   .sym:hover{border-color:var(--ink-faint)}
   .sym.on{border-color:var(--accent);background:linear-gradient(180deg,rgba(61,220,151,.10),rgba(61,220,151,.02))}
@@ -130,6 +130,16 @@
     <span class="val" id="slWidth" style="color:var(--accent)">—</span>
   </div>
 
+  <div class="ratebar">
+    <span class="lbl">TP価格（RR 1:2）</span>
+    <span class="val" id="tpPrice2" style="color:var(--warn);font-family:var(--mono);font-size:15px;font-weight:600">—</span>
+  </div>
+
+  <div class="ratebar">
+    <span class="lbl">TP価格（RR 1:3）</span>
+    <span class="val" id="tpPrice3" style="color:var(--warn);font-family:var(--mono);font-size:15px;font-weight:600">—</span>
+  </div>
+
   <div class="result">
     <div class="cap">推奨ロット</div>
     <div class="lot void" id="lotOut">—</div>
@@ -151,12 +161,15 @@
 // USD/JPY補正: K_adj = K_base × (現在レート / 162)
 const BASE_RATE = 162;
 const SYMBOLS = [
-  {id:'XAUUSD', name:'金',    k:16161.2, usd:true,  slUnit:'USD', slHint:'例: 5.00'},
-  {id:'JP225',  name:'日経',  k:1.0,     usd:false, slUnit:'pt',  slHint:'例: 100'},
-  {id:'BTCUSD', name:'BTC',   k:161.71,  usd:true,  slUnit:'USD', slHint:'例: 300'},
-  {id:'USDJPY', name:'ドル円', k:1000,    usd:false, slUnit:'pips',slHint:'例: 30', pips:true},
+  {id:'XAUUSD', name:'金',      k:16161.2, usd:true,  slUnit:'USD', dec:2},
+  {id:'JP225',  name:'日経',    k:1.0,     usd:false, slUnit:'pt',  dec:0},
+  {id:'BTCUSD', name:'BTC',     k:161.71,  usd:true,  slUnit:'USD', dec:2},
+  {id:'USDJPY', name:'ドル円',  k:1000,    usd:false, slUnit:'JPY', dec:3, pips:true},
+  {id:'EURAUD', name:'ユーロ豪', k:1070,   usd:false, slUnit:'AUD', dec:5, pips:true},
+  {id:'GBPAUD', name:'ポンド豪', k:1070,   usd:false, slUnit:'AUD', dec:5, pips:true},
 ];
-// 注: USDJPYのkは概算。実測に合わせ調整可(下のNOTE参照)。
+// 注: USDJPY/EURAUD/GBPAUDのkは暫定値。実トレードで検算し調整してください。
+// EURAUD/GBPAUD: 1lot=10万通貨, 1pipあたり約10.7AUD≈1070JPY(AUD/JPY=100想定)→ K≈1070
 
 let cur = SYMBOLS[0];
 
@@ -167,8 +180,9 @@ SYMBOLS.forEach((s,i)=>{
   d.className='sym'+(i===0?' on':'');
   d.innerHTML=`<div class="tk">${s.id}</div><div class="nm">${s.name}</div>`;
   d.onclick=()=>{cur=s;[...symbolsEl.children].forEach(c=>c.classList.remove('on'));d.classList.add('on');
-    $('entryUnit').textContent=s.slUnit==='pips'?'JPY':s.slUnit;
-    $('stopUnit').textContent=s.slUnit==='pips'?'JPY':s.slUnit;
+    const u = s.pips ? s.slUnit : s.slUnit;
+    $('entryUnit').textContent=u;
+    $('stopUnit').textContent=u;
     calc();};
   symbolsEl.appendChild(d);
 });
@@ -178,18 +192,26 @@ function calc(){
   const entry=parseFloat($('entry').value);
   const stop=parseFloat($('stop').value);
   const rate=parseFloat($('usdjpy').value)||BASE_RATE;
-  const out=$('lotOut'),detail=$('detail'),msg=$('msg'),slWidthEl=$('slWidth');
+  const out=$('lotOut'),detail=$('detail'),msg=$('msg'),slWidthEl=$('slWidth'),tp2El=$('tpPrice2'),tp3El=$('tpPrice3');
   msg.textContent='';
 
   // SL幅 = |現在値 - ロスカット値|
   let sl=NaN;
+  const isLong = stop < entry;  // 損切りが下 → ロング
   if(entry>0&&stop>0&&entry!==stop){
     sl=Math.abs(entry-stop);
-    // 表示: pips銘柄は価格差をpips換算(×100)、他はそのまま
+    // SL幅表示
     if(cur.pips) slWidthEl.textContent=(sl*100).toFixed(1)+' pips';
-    else slWidthEl.textContent=sl.toFixed(cur.id==='JP225'?0:2)+' '+cur.slUnit;
+    else slWidthEl.textContent=sl.toFixed(cur.dec)+' '+cur.slUnit;
+    // TP価格(RR1:2, RR1:3)
+    const tp2 = isLong ? entry + sl*2 : entry - sl*2;
+    const tp3 = isLong ? entry + sl*3 : entry - sl*3;
+    tp2El.textContent=tp2.toFixed(cur.dec);
+    tp3El.textContent=tp3.toFixed(cur.dec);
   }else{
     slWidthEl.textContent='—';
+    tp2El.textContent='—';
+    tp3El.textContent='—';
   }
 
   if(!risk||!sl||risk<=0||sl<=0||isNaN(sl)){
@@ -209,10 +231,13 @@ function calc(){
 
   out.innerHTML=`${disp}<span class="u">lot</span>`;out.className='lot';
   const lossAtSL=(sl*k*parseFloat(disp));
-  // 方向判定(買い/売り)
-  const dir = stop<entry ? 'ロング(買い)' : 'ショート(売り)';
+  const profitRR2=(sl*2*k*parseFloat(disp));
+  const profitRR3=(sl*3*k*parseFloat(disp));
+  const dir = isLong ? 'ロング(買い)' : 'ショート(売り)';
   detail.innerHTML=`${cur.id} · ${dir} · K=<b>${(cur.usd?k:cur.k).toFixed(cur.k<10?4:2)}</b>`+
-    `<br>この数量でSL到達時の損失 ≈ <b>¥${Math.round(lossAtSL).toLocaleString()}</b>`;
+    `<br>SL到達損失 ≈ <b style="color:var(--danger)">−¥${Math.round(lossAtSL).toLocaleString()}</b>`+
+    `<br>TP(1:2)利益 ≈ <b style="color:var(--warn)">+¥${Math.round(profitRR2).toLocaleString()}</b>`+
+    `<br>TP(1:3)利益 ≈ <b style="color:var(--accent)">+¥${Math.round(profitRR3).toLocaleString()}</b>`;
   if(lot<0.01) msg.textContent='⚠ 最小ロット(0.01)未満です。リスクを上げるかSLを狭めてください';
 }
 
